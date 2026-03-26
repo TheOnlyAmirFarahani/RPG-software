@@ -1,0 +1,101 @@
+version: "3.9"
+
+services:
+
+  auth-service:
+    build: ./auth-service
+    container_name: legends-auth
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/docs')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - legends-net
+
+  battle-service:
+    build: ./battle-service
+    container_name: legends-battle
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8083/docs')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - legends-net
+
+  pve-service:
+    build: ./pve-service
+    container_name: legends-pve
+    ports:
+      - "8082:8082"
+    environment:
+      BATTLE_SERVICE_URL: http://battle-service:8083
+      AUTH_SERVICE_URL: http://auth-service:8081
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      battle-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/docs')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - legends-net
+
+  pvp-service:
+    build: ./pvp-service
+    container_name: legends-pvp
+    ports:
+      - "8084:8084"
+    environment:
+      BATTLE_SERVICE_URL: http://battle-service:8083
+      AUTH_SERVICE_URL: http://auth-service:8081
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      battle-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8084/docs')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - legends-net
+
+  gateway:
+    build: ./gateway
+    container_name: legends-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8081
+      PVE_SERVICE_URL: http://pve-service:8082
+      BATTLE_SERVICE_URL: http://battle-service:8083
+      PVP_SERVICE_URL: http://pvp-service:8084
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      pve-service:
+        condition: service_healthy
+      battle-service:
+        condition: service_healthy
+      pvp-service:
+        condition: service_healthy
+    networks:
+      - legends-net
+
+networks:
+  legends-net:
+    driver: bridge

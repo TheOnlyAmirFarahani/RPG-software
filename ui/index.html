@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Legends of Sword and Wand</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: monospace; background: #111122; color: #ddd8c0; font-size: 14px; min-height: 100vh; }
+#nav { background: #0a0a18; border-bottom: 1px solid #2a2a4a; padding: 10px 20px;
+       display: flex; align-items: center; gap: 16px; }
+#nav .logo { color: #f0c040; font-weight: bold; font-size: 16px; flex: 1; }
+#nav .user { color: #a09070; font-size: 12px; }
+button.nav-btn { background: #2a2a4a; color: #ccc; border: none; padding: 6px 14px;
+                 font-family: monospace; cursor: pointer; font-size: 13px; }
+button.nav-btn:hover { background: #3a3a5a; }
+#app { max-width: 1200px; margin: 0 auto; padding: 20px; }
+.view { display: none; }
+.view.active { display: block; }
+.panel { background: #1a1a2e; border: 1px solid #2a2a4a; padding: 16px; margin-bottom: 14px; }
+.row { display: flex; gap: 14px; }
+.col { flex: 1; min-width: 0; }
+.col-fixed { width: 220px; flex-shrink: 0; }
+h1 { color: #f0c040; font-size: 18px; margin-bottom: 14px; }
+h2 { color: #c8b880; font-size: 14px; margin-bottom: 10px; border-bottom: 1px solid #2a2a4a; padding-bottom: 5px; }
+h3 { color: #a09070; font-size: 13px; margin-bottom: 8px; }
+label { display: block; color: #908870; margin-bottom: 3px; font-size: 12px; }
+input, select { width: 100%; padding: 6px 9px; background: #0d0d1e; border: 1px solid #2a2a4a;
+                color: #ddd8c0; font-family: monospace; font-size: 13px; margin-bottom: 10px; }
+input:focus, select:focus { outline: none; border-color: #5a4a8a; }
+button { padding: 7px 16px; border: none; font-family: monospace; font-size: 13px;
+         cursor: pointer; margin-right: 6px; margin-bottom: 6px; }
+.btn-primary { background: #4a3a7a; color: #fff; }
+.btn-green   { background: #255025; color: #aee0ae; }
+.btn-red     { background: #5a1a1a; color: #e0aeae; }
+.btn-grey    { background: #2a2a3a; color: #aaa; }
+.btn-gold    { background: #5a4400; color: #f0c040; }
+button:hover { filter: brightness(1.2); }
+button:disabled { opacity: 0.4; cursor: default; filter: none; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 5px 8px; background: #181828; color: #908870;
+     border-bottom: 1px solid #2a2a4a; font-weight: normal; }
+td { padding: 5px 8px; border-bottom: 1px solid #1a1a28; }
+tr:hover td { background: #1e1e32; cursor: pointer; }
+tr.sel td { background: #2e2550 !important; }
+.tag { display: inline-block; padding: 2px 7px; font-size: 11px; }
+.tag-ok   { background: #1a3a1a; color: #7ed87e; }
+.tag-err  { background: #3a1a1a; color: #e07e7e; }
+.tag-info { background: #1a2a3a; color: #7eb8e0; }
+.tag-gold { background: #3a2a00; color: #f0c040; }
+.tag-warn { background: #3a2a00; color: #e0b040; }
+.msg { min-height: 26px; margin-bottom: 10px; font-size: 13px; }
+.bar-wrap { height: 5px; background: #2a2a3a; margin-top: 4px; margin-bottom: 2px; }
+.bar-fill { height: 5px; transition: width 0.3s; }
+.bar-hp { background: #2a7a2a; }
+.bar-mana { background: #2a3a8a; }
+.bar-low { background: #7a2a2a; }
+.unit-card { background: #141424; border: 1px solid #2a2a4a; padding: 10px; margin-bottom: 8px; }
+.unit-card.active { border-color: #f0c040; }
+.unit-card.dead { opacity: 0.35; }
+.unit-card.stunned { border-color: #c040c0; }
+.unit-name { display: flex; justify-content: space-between; font-weight: bold; }
+.unit-stats { color: #908870; font-size: 12px; margin-top: 4px; }
+#battle-log { background: #0d0d18; border: 1px solid #1a1a2a; padding: 10px;
+              height: 130px; overflow-y: auto; font-size: 12px; }
+#battle-log p { margin-bottom: 3px; color: #706858; }
+#battle-log p:last-child { color: #c8b880; }
+.turn-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.turn-chip { padding: 3px 8px; font-size: 11px; border: 1px solid #3a3a5a;
+             background: #1a1a2e; color: #908870; }
+.turn-chip.active { border-color: #f0c040; color: #f0c040; }
+.turn-chip.wait { border-color: #9040b0; color: #c080e0; }
+.turn-chip.enemy { border-color: #7a3a2a; color: #e08060; }
+.revival-entry { padding: 6px 0; border-bottom: 1px solid #1a1a28; font-size: 13px; }
+.revival-entry:last-child { border-bottom: none; }
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+            display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal { background: #1a1a2e; border: 1px solid #3a3a6a; padding: 24px;
+         min-width: 340px; max-width: 520px; }
+.modal h2 { margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div id="nav">
+  <div class="logo">&#9876; Legends of Sword and Wand</div>
+  <span class="user" id="nav-user"></span>
+  <button class="nav-btn" id="nav-logout" onclick="doLogout()" style="display:none">Logout</button>
+</div>
+<div id="app">
+
+<!-- LOGIN -->
+<div id="view-login" class="view active">
+  <div class="panel" style="max-width:360px;margin:60px auto">
+    <h1>Sign In</h1>
+    <div class="msg" id="msg-login"></div>
+    <label>Username</label>
+    <input id="l-user" type="text" placeholder="username" autocomplete="username">
+    <label>Password</label>
+    <input id="l-pass" type="password" placeholder="password" autocomplete="current-password">
+    <button class="btn-green" onclick="doLogin()">Login</button>
+    <button class="btn-grey" onclick="doRegister()">Register</button>
+  </div>
+</div>
+
+<!-- MAIN MENU (US1) -->
+<div id="view-menu" class="view">
+  <div class="row" style="margin-top:16px">
+    <div class="col-fixed">
+      <div class="panel">
+        <h2>Campaign</h2>
+        <div class="msg" id="msg-menu"></div>
+        <button class="btn-green" onclick="startCampaign()" style="width:100%;margin-bottom:8px">New Campaign</button>
+        <button class="btn-primary" onclick="continueCampaign()" style="width:100%">Continue Campaign</button>
+      </div>
+      <div class="panel">
+        <h2>PvP Arena</h2>
+        <button class="btn-gold" onclick="showView('pvp');pvpPanel.refresh()" style="width:100%">PvP</button>
+      </div>
+    </div>
+    <div class="col">
+      <div class="panel">
+        <h2>My Scores</h2>
+        <table id="my-scores"><tr><th>Score</th><th>Date</th></tr></table>
+      </div>
+      <div class="panel">
+        <h2>Saved Parties (<span id="party-count">0</span>/5)</h2>
+        <table id="saved-parties"><tr><th>Name</th><th>Heroes</th><th></th></tr></table>
+      </div>
+    </div>
+    <div class="col">
+      <div class="panel">
+        <h2>Hall of Fame</h2>
+        <table id="hof"><tr><th>#</th><th>Player</th><th>Score</th></tr></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CAMPAIGN (US2) -->
+<div id="view-campaign" class="view">
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
+    <button class="btn-grey" onclick="exitCampaign()">Exit and Save</button>
+    <span id="camp-room" style="color:#f0c040"></span>
+    <span id="camp-gold" style="color:#c8a030"></span>
+    <span id="camp-status" style="color:#708080;font-size:12px"></span>
+  </div>
+  <div class="msg" id="msg-campaign"></div>
+  <div class="row">
+    <div class="col">
+      <div class="panel">
+        <h2>Party</h2>
+        <table id="camp-party"><tr><th>Class</th><th>Lv</th><th>HP</th><th>Mana</th><th>Atk</th><th>Def</th><th>Exp</th><th>Status</th></tr></table>
+        <div style="margin-top:10px">
+          <button class="btn-gold" onclick="showLevelUpModal()">Level Up Hero</button>
+          <button class="btn-grey" onclick="showItemModal()">Use Item</button>
+        </div>
+      </div>
+    </div>
+    <div class="col-fixed">
+      <div class="panel">
+        <h2>Inventory</h2>
+        <table id="camp-inv"><tr><th>Item</th><th>Qty</th><th>Effect</th></tr></table>
+      </div>
+      <div class="panel">
+        <button class="btn-green" onclick="nextRoom()" style="width:100%;padding:10px">Next Room</button>
+        <button class="btn-gold" id="btn-complete" onclick="completeCampaign()" style="width:100%;display:none;margin-top:6px">Complete Campaign</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BATTLE (US3) -->
+<div id="view-battle" class="view">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+    <span id="battle-turn" style="color:#f0c040;font-size:15px">Turn 1</span>
+    <span id="battle-result-badge"></span>
+  </div>
+  <div id="turn-strip" class="turn-strip"></div>
+  <div class="msg" id="msg-battle"></div>
+  <div class="row">
+    <div class="col">
+      <h3>Your Party</h3>
+      <div id="atk-units"></div>
+    </div>
+    <div class="col">
+      <h3>Enemies</h3>
+      <div id="def-units"></div>
+    </div>
+    <div class="col-fixed">
+      <h3>Actions</h3>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+        <button class="btn-red" onclick="doAction('attack')">Attack</button>
+        <button class="btn-primary" onclick="doAction('defend')">Defend (+10HP +5MP)</button>
+        <button class="btn-grey" onclick="doAction('wait')">Wait (FIFO)</button>
+        <button class="btn-gold" onclick="showCastMenu()">Cast Ability</button>
+      </div>
+      <div id="cast-menu" style="margin-top:12px;display:none">
+        <label>Ability</label>
+        <select id="ability-sel"></select>
+        <button class="btn-green" onclick="doCast()">Cast</button>
+        <button class="btn-grey" onclick="hideCastMenu()">Cancel</button>
+      </div>
+      <div style="margin-top:16px">
+        <label>Target (click enemy)</label>
+        <div id="target-display" style="color:#f0c040;font-size:12px;min-height:20px"></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:12px">
+    <h2>Battle Log</h2>
+    <div id="battle-log"></div>
+  </div>
+</div>
+
+<!-- BATTLE RESULT -->
+<div id="view-battle-result" class="view">
+  <div class="panel" style="max-width:600px;margin:40px auto">
+    <h1 id="result-title"></h1>
+    <div id="result-details" style="margin:14px 0"></div>
+    <div id="result-levelup-section"></div>
+    <div style="margin-top:14px">
+      <button class="btn-primary" onclick="afterBattle()">Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- INN (US4) -->
+<div id="view-inn" class="view">
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
+    <h1 style="margin:0">Inn</h1>
+    <span id="inn-gold" style="color:#c8a030"></span>
+    <button class="btn-grey" style="margin-left:auto" onclick="leaveInn()">Leave Inn</button>
+  </div>
+  <div class="msg" id="msg-inn"></div>
+  <div class="panel" id="revival-panel" style="display:none">
+    <h2>Your party was restored</h2>
+    <div id="revival-log"></div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <div class="panel">
+        <h2>Party Status</h2>
+        <table id="inn-party"><tr><th>Class</th><th>Lv</th><th>HP</th><th>Mana</th><th>Status</th></tr></table>
+      </div>
+    </div>
+    <div class="col">
+      <div class="panel">
+        <h2>Shop</h2>
+        <table id="inn-items"><tr><th>Item</th><th>Effect</th><th>Cost</th><th>Stock</th></tr></table>
+        <div style="margin-top:8px">
+          <button class="btn-gold" onclick="buyItem()">Buy Selected</button>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="panel">
+        <h2>Hire Heroes</h2>
+        <table id="inn-heroes"><tr><th>Class</th><th>Lv</th><th>Atk</th><th>Def</th><th>HP</th><th>Cost</th></tr></table>
+        <div style="margin-top:8px">
+          <button class="btn-primary" onclick="recruitHero()">Recruit Selected</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CAMPAIGN COMPLETE -->
+<div id="view-complete" class="view">
+  <div class="panel" style="max-width:520px;margin:40px auto">
+    <h1>Campaign Complete!</h1>
+    <div id="complete-details" style="margin-bottom:16px"></div>
+    <h2>Save Party?</h2>
+    <label>Party Name</label>
+    <input id="party-name-input" type="text" placeholder="My Campaign Party">
+    <button class="btn-green" onclick="doSaveParty()">Save Party</button>
+    <button class="btn-grey" onclick="skipSaveParty()">Skip</button>
+  </div>
+</div>
+
+<!-- PVP (US7) -->
+<div id="view-pvp" class="view">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+    <button class="btn-grey" onclick="showView('menu');menuPanel.refresh()">Menu</button>
+    <h1 style="margin:0">PvP Arena</h1>
+  </div>
+  <div class="row">
+    <div class="col-fixed">
+      <div class="panel">
+        <h2>Challenge Player</h2>
+        <div class="msg" id="msg-pvp"></div>
+        <label>Username</label>
+        <input id="pvp-target" type="text" placeholder="their username">
+        <button class="btn-red" onclick="sendInvite()">Send Invitation</button>
+        <button class="btn-grey" onclick="pvpLookup()">Look Up Invite</button>
+      </div>
+      <div class="panel">
+        <h2>Invitations</h2>
+        <table id="pvp-invites"><tr><th>From/To</th><th>Status</th></tr></table>
+        <div style="margin-top:8px">
+          <button class="btn-green" onclick="pvpRespond('accept')">Accept</button>
+          <button class="btn-red" onclick="pvpRespond('decline')">Decline</button>
+          <button class="btn-primary" onclick="pvpSelectParty()">Select Party and Fight</button>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="panel">
+        <h2>League Standings</h2>
+        <table id="league-table"><tr><th>#</th><th>Player</th><th>Wins</th><th>Losses</th></tr></table>
+        <button class="btn-grey" onclick="pvpPanel.loadLeague()" style="margin-top:8px">Refresh</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- Replace-party modal (US2: 5-party limit) -->
+<div id="replace-modal" class="modal-bg" style="display:none">
+  <div class="modal">
+    <h2>Party Limit Reached</h2>
+    <p style="margin-bottom:12px;color:#908870">You have 5 saved parties. Click one to replace it:</p>
+    <table id="replace-party-table" style="margin-bottom:16px"><tr><th>Name</th><th>Heroes</th></tr></table>
+    <button class="btn-grey" onclick="closeReplaceModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Level-up modal -->
+<div id="levelup-modal" class="modal-bg" style="display:none">
+  <div class="modal">
+    <h2>Level Up Hero</h2>
+    <div id="levelup-hero-info" style="margin-bottom:12px;color:#908870;font-size:12px"></div>
+    <label>Choose class to gain a level in:</label>
+    <select id="levelup-class-sel">
+      <option value="warrior">Warrior (+2atk +3def per level)</option>
+      <option value="order">Order (+2def +5mana per level)</option>
+      <option value="chaos">Chaos (+3atk +5hp per level)</option>
+      <option value="mage">Mage (+1atk +5mana per level)</option>
+    </select>
+    <p style="font-size:11px;color:#606870;margin-bottom:10px">
+      Base gains always applied: +1atk +1def +5hp +2mana. Class bonus is additional.<br>
+      At class level 5: specialization (double class bonus). Two classes at 5: hybrid class.
+    </p>
+    <button class="btn-gold" onclick="confirmLevelUp()">Confirm Level Up</button>
+    <button class="btn-grey" onclick="closeLevelUpModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Use-item modal -->
+<div id="item-modal" class="modal-bg" style="display:none">
+  <div class="modal">
+    <h2>Use Item</h2>
+    <label>Select Item</label>
+    <select id="item-sel"></select>
+    <label>Select Hero</label>
+    <select id="item-hero-sel"></select>
+    <button class="btn-green" onclick="confirmUseItem()">Use</button>
+    <button class="btn-grey" onclick="closeItemModal()">Cancel</button>
+  </div>
+</div>
+
+<script>
+const GW = 'http://localhost:8080';
+let token=null,userId=null,username=null;
+let campaignId=null,battleId=null,campaignComplete=null;
+let battleState=null,selectedTarget=null,levelUpHeroId=null;
+let selectedInnItem=null,selectedInnHero=null,selectedPvpInvite=null;
+
+async function api(method,path,body){
+  const opts={method,headers:{'Content-Type':'application/json'}};
+  if(token) opts.headers['Authorization']='Session '+token;
+  if(body!=null) opts.body=JSON.stringify(body);
+  try{
+    const r=await fetch(GW+path,opts);
+    const t=await r.text();
+    return{ok:r.ok,status:r.status,data:t?JSON.parse(t):{}};
+  }catch(e){return{ok:false,status:0,data:{error:e.message}};}
+}
+const GET=(p)=>api('GET',p,null);
+const POST=(p,b)=>api('POST',p,b??null);
+const PUT=(p,b)=>api('PUT',p,b??null);
+const DEL=(p)=>api('DELETE',p,null);
+
+function showView(n){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById('view-'+n).classList.add('active');}
+function msg(id,text,type='info'){const el=document.getElementById(id);if(!el)return;el.innerHTML=text?`<span class="tag tag-${type}">${text}</span>`:'';}
+
+async function doLogin(){
+  const u=document.getElementById('l-user').value.trim();
+  const p=document.getElementById('l-pass').value;
+  if(!u||!p){msg('msg-login','Enter username and password','err');return;}
+  const r=await POST('/auth/login',{username:u,password:p});
+  if(r.ok){
+    token=r.data.token;userId=r.data.userId;username=u;
+    document.getElementById('nav-user').textContent=username;
+    document.getElementById('nav-logout').style.display='';
+    document.getElementById('l-pass').value='';
+    msg('msg-login','','');
+    showView('menu');menuPanel.refresh();
+  }else msg('msg-login',r.data.detail||r.data.error||'Login failed','err');
+}
+async function doRegister(){
+  const u=document.getElementById('l-user').value.trim();
+  const p=document.getElementById('l-pass').value;
+  if(!u||!p){msg('msg-login','Enter username and password','err');return;}
+  const r=await POST('/auth/register',{username:u,password:p});
+  if(r.ok)msg('msg-login','Registered! You can now log in.','ok');
+  else msg('msg-login',r.data.detail||r.data.error||'Registration failed','err');
+}
+async function doLogout(){
+  if(token)await POST('/auth/logout',null);
+  token=userId=username=campaignId=battleId=null;
+  document.getElementById('nav-user').textContent='';
+  document.getElementById('nav-logout').style.display='none';
+  showView('login');
+}
+document.getElementById('l-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+document.getElementById('l-user').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('l-pass').focus();});
+
+const menuPanel={
+  async refresh(){
+    const r=await GET('/profile/'+userId);
+    if(!r.ok)return;
+    const d=r.data;
+    const st=document.getElementById('my-scores');
+    st.innerHTML='<tr><th>Score</th><th>Date</th></tr>';
+    (d.scores||[]).forEach(s=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${s.campaignScore}</td><td>${s.achievedAt?s.achievedAt.substring(0,10):''}</td>`;st.appendChild(tr);});
+    const parties=d.savedParties||[];
+    document.getElementById('party-count').textContent=parties.length;
+    const pt=document.getElementById('saved-parties');
+    pt.innerHTML='<tr><th>Name</th><th>Heroes</th><th></th></tr>';
+    parties.forEach(p=>{
+      const tr=document.createElement('tr');
+      const hs=(p.heroes||[]).map(h=>h.heroClass+' Lv'+h.level).join(', ');
+      tr.innerHTML=`<td>${p.name}</td><td style="font-size:11px;color:#908870">${hs}</td><td><button class="btn-red" style="padding:2px 8px;font-size:11px" onclick="deleteParty('${p.partyId}')">X</button></td>`;
+      pt.appendChild(tr);
+    });
+    const hof=await GET('/scores/hall-of-fame');
+    if(hof.ok){const ht=document.getElementById('hof');ht.innerHTML='<tr><th>#</th><th>Player</th><th>Score</th></tr>';(hof.data.hallOfFame||[]).forEach(e=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${e.rank}</td><td>${e.username}</td><td>${e.campaignScore}</td>`;ht.appendChild(tr);});}
+  }
+};
+async function deleteParty(pid){if(!confirm('Delete this party?'))return;await DEL(`/profile/${userId}/parties/${pid}`);menuPanel.refresh();}
+
+async function startCampaign(){
+  const cls=prompt('Choose starting class:\nwarrior - +2atk +3def\norder   - +2def +5mana\nchaos   - +3atk +5hp\nmage    - +1atk +5mana\n\nEnter class:');
+  if(!cls)return;
+  msg('msg-menu','Starting...');
+  const r=await POST('/pve/campaign',{heroClass:cls.trim().toLowerCase()});
+  if(r.ok){campaignId=r.data.campaignId;msg('msg-menu','','');showView('campaign');campaignPanel.refresh();}
+  else msg('msg-menu',r.data.detail||r.data.error||'Failed to start','err');
+}
+async function continueCampaign(){
+  msg('msg-menu','Loading...');
+  const pr=await GET('/profile/'+userId);
+  if(!pr.ok||!pr.data.activeCampaignId){msg('msg-menu','No active campaign found','err');return;}
+  campaignId=pr.data.activeCampaignId;
+  const cr=await GET('/pve/campaign/'+campaignId);
+  if(!cr.ok){msg('msg-menu','Could not load campaign','err');return;}
+  msg('msg-menu','','');
+  const status=cr.data.status;
+  if(status==='in_battle'&&cr.data.activeBattleId){battleId=cr.data.activeBattleId;showView('battle');await refreshBattle();}
+  else if(status==='at_inn'){showView('inn');await innPanel.refresh();}
+  else{showView('campaign');await campaignPanel.refresh();}
+}
+
+const campaignPanel={
+  async refresh(){
+    if(!campaignId)return;
+    const r=await GET('/pve/campaign/'+campaignId);
+    if(!r.ok)return;
+    const d=r.data;
+    document.getElementById('camp-room').textContent='Room '+d.roomNumber+'/30';
+    document.getElementById('camp-gold').textContent='Gold: '+d.gold+'g';
+    document.getElementById('camp-status').textContent=d.status;
+    const btn=document.getElementById('btn-complete');
+    if(btn)btn.style.display=(d.roomNumber>=30&&d.status!=='in_battle')?'block':'none';
+    renderPartyTable('camp-party',d.party,true);
+    renderInventory(d.inventory);
+  }
+};
+function renderPartyTable(tid,party,sel){
+  const t=document.getElementById(tid);
+  t.innerHTML='<tr><th>Class</th><th>Lv</th><th>HP</th><th>Mana</th><th>Atk</th><th>Def</th><th>Exp</th><th>Status</th></tr>';
+  (party||[]).forEach(h=>{
+    const tr=document.createElement('tr');tr.dataset.heroId=h.heroId;
+    const cls=h.displayClass||h.heroClass;
+    const hpP=Math.round(h.currentHealth/h.health*100);
+    const mpP=Math.round(h.currentMana/h.mana*100);
+    const ev=h.hybridClass?`<span class="tag tag-gold">${h.hybridClass}</span>`:h.specialization?`<span class="tag tag-info">${h.specialization}</span>`:'';
+    tr.innerHTML=`<td><strong>${cls}</strong> ${ev}</td><td>${h.level}</td>
+      <td>${h.currentHealth}/${h.health}<div class="bar-wrap"><div class="bar-fill ${hpP<30?'bar-low':'bar-hp'}" style="width:${hpP}%"></div></div></td>
+      <td>${h.currentMana}/${h.mana}<div class="bar-wrap"><div class="bar-fill bar-mana" style="width:${mpP}%"></div></div></td>
+      <td>${h.attack}</td><td>${h.defense}</td>
+      <td>${h.experience}/${h.expNeeded}${h.canLevelUp?'<span class="tag tag-gold" style="margin-left:4px">READY</span>':''}</td>
+      <td>${h.dead?'<span class="tag tag-err">Dead</span>':'<span class="tag tag-ok">OK</span>'}</td>`;
+    if(sel)tr.onclick=()=>{document.querySelectorAll('#'+tid+' tr').forEach(r=>r.classList.remove('sel'));tr.classList.add('sel');};
+    t.appendChild(tr);
+  });
+}
+function renderInventory(inv){
+  const t=document.getElementById('camp-inv');
+  t.innerHTML='<tr><th>Item</th><th>Qty</th><th>Effect</th></tr>';
+  (inv||[]).forEach(i=>{
+    const tr=document.createElement('tr');tr.dataset.itemId=i.itemId;
+    tr.innerHTML=`<td>${i.itemType}</td><td>${i.quantity}</td><td style="color:#908870">${i.effect||''}</td>`;
+    tr.onclick=()=>{document.querySelectorAll('#camp-inv tr').forEach(r=>r.classList.remove('sel'));tr.classList.add('sel');};
+    t.appendChild(tr);
+  });
+}
+async function nextRoom(){
+  msg('msg-campaign','Advancing...');
+  const r=await POST('/pve/campaign/'+campaignId+'/next-room',null);
+  if(!r.ok){msg('msg-campaign',r.data.detail||r.data.error||'Failed','err');return;}
+  msg('msg-campaign','','');
+  if(r.data.roomType==='battle'){battleId=r.data.battleId;showView('battle');await refreshBattle();}
+  else{showView('inn');await innPanel.refresh();}
+}
+async function exitCampaign(){
+  const r=await PUT('/pve/campaign/'+campaignId,null);
+  if(r.ok){showView('menu');menuPanel.refresh();}
+  else msg('msg-campaign',r.data.detail||r.data.error||'Cannot exit now','err');
+}
+async function completeCampaign(){
+  const r=await POST('/pve/campaign/'+campaignId+'/complete',{});
+  if(!r.ok){msg('msg-campaign',r.data.detail||r.data.error||'Error','err');return;}
+  campaignComplete=r.data;
+  let html=`<table>
+    <tr><td>Hero Levels x100:</td><td style="color:#f0c040">${campaignComplete.cumLevels} x 100 = ${campaignComplete.cumLevels*100}</td></tr>
+    <tr><td>Gold x10:</td><td style="color:#f0c040">${campaignComplete.gold} x 10 = ${campaignComplete.gold*10}</td></tr>
+    <tr><td>Item Score:</td><td style="color:#f0c040">${campaignComplete.itemScore}</td></tr>
+    <tr><td><strong>Total:</strong></td><td style="color:#f0c040"><strong>${campaignComplete.campaignScore}</strong></td></tr>
+  </table>`;
+  document.getElementById('complete-details').innerHTML=html;
+  showView('complete');
+}
+function showLevelUpModal(){
+  const sel=document.querySelector('#camp-party tr.sel');
+  if(!sel||!sel.dataset.heroId){alert('Select a hero first.');return;}
+  levelUpHeroId=sel.dataset.heroId;
+  const tds=sel.querySelectorAll('td');
+  document.getElementById('levelup-hero-info').innerHTML=`${tds[0]?.textContent} Level ${tds[1]?.textContent} Exp: ${tds[6]?.textContent}`;
+  document.getElementById('levelup-modal').style.display='flex';
+}
+function closeLevelUpModal(){document.getElementById('levelup-modal').style.display='none';}
+async function confirmLevelUp(){
+  const cls=document.getElementById('levelup-class-sel').value;
+  const r=await POST(`/pve/campaign/${campaignId}/party/hero/${levelUpHeroId}/level-up`,{classChoice:cls});
+  closeLevelUpModal();
+  if(r.ok){
+    const info=r.data.levelUpInfo||{};
+    let note='Levelled up as '+cls+'!';
+    if(info.newHybridClass)note+=' Became '+info.newHybridClass.toUpperCase()+'!';
+    else if(info.newSpecialization)note+=' Specialization: '+info.newSpecialization+'!';
+    if(info.gains)note+=' +'+info.gains.attack+'atk +'+info.gains.defense+'def +'+info.gains.health+'hp +'+info.gains.mana+'mp';
+    msg('msg-campaign',note,'ok');campaignPanel.refresh();
+  }else msg('msg-campaign',r.data.detail||r.data.error||'Cannot level up','err');
+}
+function showItemModal(){
+  const inv=document.querySelectorAll('#camp-inv tr[data-item-id]');
+  const party=document.querySelectorAll('#camp-party tr[data-hero-id]');
+  if(!inv.length){alert('No items in inventory.');return;}
+  const is=document.getElementById('item-sel');is.innerHTML='';
+  inv.forEach(tr=>{const o=document.createElement('option');o.value=tr.dataset.itemId;o.textContent=tr.querySelectorAll('td')[0]?.textContent;is.appendChild(o);});
+  const hs=document.getElementById('item-hero-sel');hs.innerHTML='';
+  party.forEach(tr=>{const o=document.createElement('option');o.value=tr.dataset.heroId;o.textContent=tr.querySelectorAll('td')[0]?.textContent;hs.appendChild(o);});
+  document.getElementById('item-modal').style.display='flex';
+}
+function closeItemModal(){document.getElementById('item-modal').style.display='none';}
+async function confirmUseItem(){
+  const itemId=document.getElementById('item-sel').value;
+  const heroId=document.getElementById('item-hero-sel').value;
+  const r=await POST('/pve/campaign/'+campaignId+'/inventory/give',{itemId,heroId});
+  closeItemModal();
+  if(r.ok){msg('msg-campaign','Item used!','ok');campaignPanel.refresh();}
+  else msg('msg-campaign',r.data.detail||r.data.error||'Failed','err');
+}
+
+async function refreshBattle(){
+  if(!battleId)return;
+  const r=await GET('/battle/'+battleId);
+  if(!r.ok){msg('msg-battle','Could not load battle','err');return;}
+  battleState=r.data;renderBattle(r.data);
+}
+function renderBattle(s){
+  document.getElementById('battle-turn').textContent='Turn '+s.currentTurn+' '+s.type.toUpperCase();
+  const strip=document.getElementById('turn-strip');strip.innerHTML='';
+  const all=[...(s.attackerUnits||[]),...(s.defenderUnits||[])];
+  const byId=Object.fromEntries(all.map(u=>[u.unitId,u]));
+  const wq=new Set(s.waitQueue||[]);
+  (s.turnOrder||[]).forEach((uid,i)=>{
+    const u=byId[uid];if(!u)return;
+    const chip=document.createElement('div');
+    chip.className='turn-chip'+(uid===s.activeUnitId?' active':'')+( wq.has(uid)?' wait':'')+( u.team==='defender'?' enemy':'');
+    chip.textContent=(i+1)+'. '+u.name+(u.dead?'[dead]':u.stunned?'[stun]':wq.has(uid)?'[wait]':''  );
+    strip.appendChild(chip);
+  });
+  renderUnitCards('atk-units',s.attackerUnits||[],s.activeUnitId,'attacker');
+  renderUnitCards('def-units',s.defenderUnits||[],s.activeUnitId,'defender');
+  if(s.status==='completed'){
+    const won=s.winner==='attacker';
+    document.getElementById('battle-result-badge').innerHTML=won?'<span class="tag tag-ok">Victory!</span>':'<span class="tag tag-err">Defeated</span>';
+    setTimeout(()=>showBattleResult(s),2000);
+  } else {
+    // Bug 1 fix: auto-execute enemy turns so defenders never wait for player input
+    const isEnemyTurn=(s.defenderUnits||[]).some(u=>u.unitId===s.activeUnitId);
+    if(isEnemyTurn) setTimeout(()=>doEnemyAutoAction(s.activeUnitId),700);
+  }
+}
+function renderUnitCards(cid,units,activeId,team){
+  const el=document.getElementById(cid);el.innerHTML='';
+  units.forEach(u=>{
+    const hp=Math.max(0,Math.round(u.currentHealth/u.baseHealth*100));
+    const mp=Math.max(0,Math.round(u.currentMana/u.baseMana*100));
+    const div=document.createElement('div');
+    div.className='unit-card'+(u.unitId===activeId?' active':'')+( u.dead?' dead':'')+( u.stunned?' stunned':'');
+    div.dataset.unitId=u.unitId;
+    div.innerHTML=`<div class="unit-name"><span>${u.name} <span style="color:#808060;font-size:11px">${u.heroClass||''}</span></span>
+      <span style="color:#808060;font-size:11px">Lv${u.level}${u.unitId===activeId?' [ACT]':''}${u.stunned?' [STUN]':''}${u.dead?' [DEAD]':''}</span></div>
+      <div class="unit-stats">HP:${u.currentHealth}/${u.baseHealth} MP:${u.currentMana}/${u.baseMana} Atk:${u.baseAttack} Def:${u.baseDefense}${u.currentShield>0?' Shield:'+u.currentShield:''}</div>
+      <div class="bar-wrap"><div class="bar-fill ${hp<30?'bar-low':'bar-hp'}" style="width:${hp}%"></div></div>
+      <div class="bar-wrap"><div class="bar-fill bar-mana" style="width:${mp}%"></div></div>
+      ${(u.abilities||[]).length?'<div style="font-size:11px;color:#606880;margin-top:4px">Abilities: '+(u.abilities||[]).join(', ')+'</div>':''  }`;
+    if(team==='defender'&&!u.dead)div.onclick=()=>{
+      document.querySelectorAll('.unit-card').forEach(c=>c.style.outline='');
+      div.style.outline='1px solid #f0c040';
+      selectedTarget=u.unitId;
+      document.getElementById('target-display').textContent='Target: '+u.name+' HP:'+u.currentHealth;
+    };
+    el.appendChild(div);
+  });
+}
+async function doEnemyAutoAction(aid){
+  // Bug 1 fix: enemies attack a random living attacker (not themselves)
+  const targets=(battleState.attackerUnits||[]).filter(u=>!u.dead);
+  if(!targets.length)return;
+  const target=targets[Math.floor(Math.random()*targets.length)];
+  const req={unitId:aid,actionType:'attack',targetUnitId:target.unitId};
+  const r=await POST('/battle/'+battleId+'/action',req);
+  if(r.ok){battleState=r.data;renderBattle(r.data);appendBattleLog(r.data);}
+  // Enemy action errors are silently ignored to avoid confusing the player
+}
+async function doAction(type){
+  if(!battleState||battleState.status==='completed')return;
+  const aid=battleState.activeUnitId;if(!aid)return;
+  // Bug 1 fix: block player from acting on enemy turns
+  const isEnemyTurn=(battleState.defenderUnits||[]).some(u=>u.unitId===aid);
+  if(isEnemyTurn){await doEnemyAutoAction(aid);return;}
+  const req={unitId:aid,actionType:type};
+  if(type==='attack'&&selectedTarget)req.targetUnitId=selectedTarget;
+  else if(type==='attack'){const f=(battleState.defenderUnits||[]).find(u=>!u.dead);if(f)req.targetUnitId=f.unitId;}
+  const r=await POST('/battle/'+battleId+'/action',req);
+  if(r.ok){battleState=r.data;renderBattle(r.data);appendBattleLog(r.data);}
+  else msg('msg-battle',r.data.detail||r.data.error||'Action failed','err');
+}
+function showCastMenu(){
+  if(!battleState||battleState.status==='completed')return;
+  // Bug 4 fix: don't open cast menu on enemy turns
+  const isEnemyTurn=(battleState.defenderUnits||[]).some(u=>u.unitId===battleState.activeUnitId);
+  if(isEnemyTurn){doEnemyAutoAction(battleState.activeUnitId);return;}
+  const au=(battleState.attackerUnits||[]).find(u=>u.unitId===battleState.activeUnitId);
+  const ab=au?au.abilities||[]:[];
+  if(!ab.length){msg('msg-battle','No abilities available','err');return;}
+  const sel=document.getElementById('ability-sel');
+  sel.innerHTML=ab.map(a=>`<option value="${a}">${a.replace(/_/g,' ')}</option>`).join('');
+  document.getElementById('cast-menu').style.display='block';
+}
+function hideCastMenu(){document.getElementById('cast-menu').style.display='none';}
+async function doCast(){
+  const ability=document.getElementById('ability-sel').value;hideCastMenu();
+  const aid=battleState.activeUnitId;
+  // Bug 4 fix: guard against enemy turns (shouldn't reach here, but belt-and-suspenders)
+  const isEnemyTurn=(battleState.defenderUnits||[]).some(u=>u.unitId===aid);
+  if(isEnemyTurn){await doEnemyAutoAction(aid);return;}
+  const req={unitId:aid,actionType:'cast',ability};
+  if(selectedTarget)req.targetUnitId=selectedTarget;
+  else{
+    // Bug 4 fix: cast fallback target must be an enemy (defender), not a teammate
+    const f=(battleState.defenderUnits||[]).find(u=>!u.dead);
+    if(f)req.targetUnitId=f.unitId;
+  }
+  const r=await POST('/battle/'+battleId+'/action',req);
+  if(r.ok){battleState=r.data;renderBattle(r.data);appendBattleLog(r.data);}
+  else msg('msg-battle',r.data.detail||r.data.error||'Cast failed','err');
+}
+function appendBattleLog(s){
+  const el=document.getElementById('battle-log');
+  const logs=s.actionLog||[];if(!logs.length)return;
+  const l=logs[logs.length-1];
+  const p=document.createElement('p');
+  p.textContent='T'+l.turn+' '+l.actingUnitId?.substring(0,6)+': '+l.actionType+(l.abilityUsed?' ('+l.abilityUsed+')':'')+' dmg:'+l.damageDealt+' heal:'+l.healingDone+(l.notes?' ['+l.notes+']':''  );
+  el.appendChild(p);el.scrollTop=el.scrollHeight;
+}
+async function showBattleResult(state){
+  const r=await POST('/pve/campaign/'+campaignId+'/battle/result',null);
+  const d=r.ok?r.data:{playerWon:state?.winner==='attacker',gold:0,heroResults:[]};
+  const won=d.playerWon;
+  const title=document.getElementById('result-title');
+  title.textContent=won?'Victory!':'Defeated';
+  title.style.color=won?'#7ed87e':'#e07e7e';
+  let html=won?`<p style="color:#c8b880;margin-bottom:10px">Gold gained: +${d.goldDelta||0}g. Total: ${d.gold}g</p>`
+               :`<p style="color:#c8b880;margin-bottom:10px">Lost 10% gold. Returned to last inn. Gold: ${d.gold}g</p>`;
+  const hr=d.heroResults||[];
+  if(hr.length){
+    html+='<table><tr><th>Hero</th><th>'+(won?'Exp Gained':'Exp Lost')+'</th><th>Level Up?</th></tr>';
+    hr.forEach(h=>{html+=`<tr><td>${h.heroClass}</td><td>${won?'+'+h.expGained:'-'+h.expLost}</td><td>${h.canLevelUp?'<span class="tag tag-gold">YES</span>':'No'}</td></tr>`;});
+    html+='</table>';
+  }
+  document.getElementById('result-details').innerHTML=html;
+  const lvlSec=document.getElementById('result-levelup-section');
+  if(won&&hr.some(h=>h.canLevelUp)){lvlSec.innerHTML='<p style="color:#f0c040;margin-bottom:8px">Heroes ready to level up! Use the campaign panel.</p>';}
+  else lvlSec.innerHTML='';
+  showView('battle-result');
+}
+async function afterBattle(){
+  const r=await GET('/pve/campaign/'+campaignId);
+  if(!r.ok){showView('campaign');campaignPanel.refresh();return;}
+  if(r.data.status==='at_inn'){showView('inn');innPanel.refresh();}
+  else if(r.data.roomNumber>=30){await completeCampaign();}
+  else{showView('campaign');campaignPanel.refresh();}
+}
+
+const innPanel={
+  async refresh(){
+    if(!campaignId)return;
+    const r=await GET('/pve/campaign/'+campaignId+'/inn');
+    if(!r.ok){msg('msg-inn',r.data.detail||r.data.error||'Failed','err');return;}
+    const d=r.data;
+    document.getElementById('inn-gold').textContent='Gold: '+d.gold+'g';
+    const revLog=d.revivalLog||[];
+    const rp=document.getElementById('revival-panel');
+    if(revLog.length){
+      const rl=document.getElementById('revival-log');rl.innerHTML='';
+      revLog.forEach(e=>{
+        const div=document.createElement('div');div.className='revival-entry';
+        if(e.action==='revived')div.innerHTML='<span class="tag tag-ok">Revived</span> '+( e.displayClass||e.heroClass)+' -- fully restored';
+        else div.innerHTML='<span class="tag tag-info">Healed</span> '+(e.displayClass||e.heroClass)+' +'+e.hpRestored+'HP, +'+e.manaRestored+'MP';
+        rl.appendChild(div);
+      });
+      rp.style.display='block';
+    }else rp.style.display='none';
+    const ip=document.getElementById('inn-party');
+    ip.innerHTML='<tr><th>Class</th><th>Lv</th><th>HP</th><th>Mana</th><th>Status</th></tr>';
+    (d.party||[]).forEach(h=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${h.displayClass||h.heroClass}</td><td>${h.level}</td><td>${h.currentHealth}/${h.health}</td><td>${h.currentMana}/${h.mana}</td><td>${h.dead?'<span class="tag tag-err">Dead</span>':'<span class="tag tag-ok">OK</span>'}</td>`;
+      ip.appendChild(tr);
+    });
+    const it=document.getElementById('inn-items');
+    it.innerHTML='<tr><th>Item</th><th>Effect</th><th>Cost</th><th>Stock</th></tr>';
+    selectedInnItem=null;
+    (d.availableItems||[]).forEach(i=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${i.itemType}</td><td>${i.effect}</td><td>${i.cost}g</td><td>${i.quantity}</td>`;
+      tr.onclick=()=>{it.querySelectorAll('tr').forEach(r=>r.classList.remove('sel'));tr.classList.add('sel');selectedInnItem=i.itemType;};
+      it.appendChild(tr);
+    });
+    const ht=document.getElementById('inn-heroes');
+    ht.innerHTML='<tr><th>Class</th><th>Lv</th><th>Atk</th><th>Def</th><th>HP</th><th>Cost</th></tr>';
+    selectedInnHero=null;
+    (d.availableHeroes||[]).forEach(h=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${h.heroClass}</td><td>${h.level}</td><td>${h.attack}</td><td>${h.defense}</td><td>${h.health}</td><td>${h.recruitCost===0?'Free':h.recruitCost+'g'}</td>`;
+      tr.onclick=()=>{ht.querySelectorAll('tr').forEach(r=>r.classList.remove('sel'));tr.classList.add('sel');selectedInnHero=h.innHeroId;};
+      ht.appendChild(tr);
+    });
+  }
+};
+async function buyItem(){
+  if(!selectedInnItem){msg('msg-inn','Select an item first','err');return;}
+  const r=await POST('/pve/campaign/'+campaignId+'/inn/purchase',{itemType:selectedInnItem});
+  if(r.ok){msg('msg-inn','Bought '+selectedInnItem+'! Gold: '+r.data.remainingGold+'g','ok');innPanel.refresh();}
+  else msg('msg-inn',r.data.detail||r.data.error||'Purchase failed','err');
+}
+async function recruitHero(){
+  if(!selectedInnHero){msg('msg-inn','Select a hero first','err');return;}
+  const r=await POST('/pve/campaign/'+campaignId+'/inn/recruit',{innHeroId:selectedInnHero});
+  if(r.ok){msg('msg-inn','Recruited! Gold: '+r.data.remainingGold+'g','ok');innPanel.refresh();}
+  else msg('msg-inn',r.data.detail||r.data.error||'Recruit failed','err');
+}
+async function leaveInn(){
+  const r=await GET('/pve/campaign/'+campaignId);
+  if(r.ok&&r.data.roomNumber>=30){await completeCampaign();return;}
+  showView('campaign');await campaignPanel.refresh();
+}
+async function doSaveParty(){
+  const name=document.getElementById('party-name-input').value.trim()||'Campaign Party';
+  const r=await POST('/pve/campaign/'+campaignId+'/save-party',{name});
+  if(r.ok&&r.data.needsReplacement){
+    const parties=r.data.savedParties||[];
+    const rt=document.getElementById('replace-party-table');
+    rt.innerHTML='<tr><th>Name</th><th>Heroes</th></tr>';
+    parties.forEach(p=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${p.name}</td><td style="font-size:11px">${(p.heroes||[]).map(h=>h.heroClass+' Lv'+h.level).join(', ')}</td>`;
+      tr.onclick=async()=>{closeReplaceModal();await POST('/pve/campaign/'+campaignId+'/save-party',{name,replacePartyId:p.partyId});afterComplete();};
+      rt.appendChild(tr);
+    });
+    document.getElementById('replace-modal').style.display='flex';
+  }else afterComplete();
+}
+function skipSaveParty(){afterComplete();}
+function closeReplaceModal(){document.getElementById('replace-modal').style.display='none';}
+function afterComplete(){campaignId=battleId=campaignComplete=null;showView('menu');menuPanel.refresh();}
+
+const pvpPanel={
+  async refresh(){await this.loadLeague();},
+  async loadLeague(){
+    const r=await GET('/pvp/league');
+    if(!r.ok)return;
+    const t=document.getElementById('league-table');
+    t.innerHTML='<tr><th>#</th><th>Player</th><th>Wins</th><th>Losses</th></tr>';
+    (r.data.standings||[]).forEach(s=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${s.rank}</td><td>${s.username}</td><td>${s.wins}</td><td>${s.losses}</td>`;t.appendChild(tr);});
+  }
+};
+function addInviteRow(inv,dir){
+  const t=document.getElementById('pvp-invites');
+  const tr=document.createElement('tr');tr.dataset.invId=inv.invitationId;
+  tr.innerHTML=`<td>${dir==='sent'?'To: '+inv.inviteeId:'From: '+inv.inviterUsername}</td><td><span class="tag tag-info">${inv.status}</span></td>`;
+  tr.onclick=()=>{t.querySelectorAll('tr').forEach(r=>r.classList.remove('sel'));tr.classList.add('sel');selectedPvpInvite=inv.invitationId;};
+  t.appendChild(tr);tr.click();
+}
+async function sendInvite(){
+  const invitee=document.getElementById('pvp-target').value.trim();
+  if(!invitee){msg('msg-pvp','Enter a username','err');return;}
+  const r=await POST('/pvp/invitations',{inviteeUsername:invitee});
+  if(r.ok){msg('msg-pvp','Invitation sent! ID: '+r.data.invitationId,'ok');document.getElementById('pvp-target').value='';addInviteRow(r.data,'sent');}
+  else msg('msg-pvp',r.data.detail||r.data.error||'Failed','err');
+}
+async function pvpLookup(){
+  const id=prompt('Paste invitation ID:');if(!id)return;
+  const r=await GET('/pvp/invitations/'+id);
+  if(r.ok)addInviteRow({...r.data,invitationId:id},r.data.inviterId===userId?'sent':'received');
+  else msg('msg-pvp','Invitation not found','err');
+}
+async function pvpRespond(action){
+  if(!selectedPvpInvite){msg('msg-pvp','Select an invitation','err');return;}
+  const r=await PUT('/pvp/invitations/'+selectedPvpInvite,{action});
+  if(r.ok)msg('msg-pvp','Invitation '+r.data.status,'ok');
+  else msg('msg-pvp',r.data.detail||r.data.error||'Failed','err');
+  pvpPanel.loadLeague();
+}
+async function pvpSelectParty(){
+  if(!selectedPvpInvite){msg('msg-pvp','Select an invitation','err');return;}
+  const pr=await GET('/profile/'+userId+'/parties');
+  if(!pr.ok||(pr.data.parties||[]).length===0){msg('msg-pvp','No saved parties. Complete a campaign first.','err');return;}
+  const parties=pr.data.parties;
+  const names=parties.map((p,i)=>(i+1)+'. '+p.name+' ('+( (p.heroes||[]).length)+' heroes)').join('\n');
+  const choice=prompt('Choose party:\n'+names+'\nEnter number:');
+  if(!choice)return;
+  const idx=parseInt(choice)-1;
+  if(isNaN(idx)||idx<0||idx>=parties.length){msg('msg-pvp','Invalid choice','err');return;}
+  const r=await POST('/pvp/invitations/'+selectedPvpInvite+'/select-party',{partyId:parties[idx].partyId});
+  if(r.ok){
+    if(r.data.status==='in_battle'){msg('msg-pvp','Battle started!','ok');battleId=r.data.battleId;showView('battle');await refreshBattle();}
+    else msg('msg-pvp','Waiting for opponent...','info');
+  }else msg('msg-pvp',r.data.detail||r.data.error||'Failed','err');
+}
+</script>
+</body>
+</html>
