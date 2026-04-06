@@ -16,15 +16,17 @@ Base = declarative_base()
 BATTLE_URL = os.getenv("BATTLE_SERVICE_URL", "http://localhost:8083")
 AUTH_URL   = os.getenv("AUTH_SERVICE_URL",   "http://localhost:8081")
 
+#  Models
+
 class Campaign(Base):
     __tablename__ = "campaigns"
     id               = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id          = Column(String, nullable=False)
-    status           = Column(String, default="in_progress")
+    status           = Column(String, default="in_progress")  # in_progress|in_battle|at_inn|completed
     current_room     = Column(Integer, default=0)
     gold             = Column(Integer, default=0)
     active_battle_id = Column(String)
-    last_inn_room    = Column(Integer, default=0)
+    last_inn_room    = Column(Integer, default=0)  # spec: on loss, return here
     updated_at       = Column(DateTime, default=datetime.utcnow)
     heroes    = relationship("Hero",    back_populates="campaign", cascade="all, delete-orphan")
     inventory = relationship("InvItem", back_populates="campaign", cascade="all, delete-orphan")
@@ -34,9 +36,9 @@ class Hero(Base):
     __tablename__ = "heroes"
     id             = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     campaign_id    = Column(String, ForeignKey("campaigns.id"), nullable=False)
-    # Starting class (order/chaos/warrior/mage) — used for display when no spec/hybrid
+    # Starting class (order/chaos/warrior/mage)  used for display when no spec/hybrid
     hero_class     = Column(String)
-    # Per-class level tracking — key for specialization/hybrid detection
+    # Per-class level tracking  key for specialization/hybrid detection
     order_levels   = Column(Integer, default=0)
     chaos_levels   = Column(Integer, default=0)
     warrior_levels = Column(Integer, default=0)
@@ -94,7 +96,7 @@ class InnItem(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# ── Spec formulas & constants ─────────────────────────────────────────────────
+#  Spec formulas & constants
 
 CLASSES = ["order", "chaos", "warrior", "mage"]
 
@@ -163,8 +165,8 @@ def display_class(h: Hero) -> str:
     return h.hero_class.capitalize()
 
 def exp_needed(level: int) -> int:
-    """Exp(L) = Exp(L-1) + 500 + 75*L + 20*L^2. Cumulative from level 1."""
-    return sum(500 + 75*l + 20*l*l for l in range(1, level+1))
+    """Easier curve: ~40% of original so levelling feels rewarding."""
+    return max(50, int(sum(500 + 75*l + 20*l*l for l in range(1, level+1)) * 0.4))
 
 def battle_chance(cum: int) -> float:
     """60% base + 3% per 10 cumulative levels, max 90%."""
@@ -235,7 +237,7 @@ def _apply_level_up(h: Hero, chosen_class: str, db) -> dict:
         "canLevelUpAgain": h.experience >= exp_needed(h.level)
     }
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+#  Helpers
 
 def hero_map(h: Hero) -> dict:
     return {
@@ -274,7 +276,7 @@ def _notify_auth(path: str, data: dict, uid: str):
                     headers={"X-User-Id": uid}, timeout=3)
     except Exception: pass
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+#  Routes
 
 @app.post("/pve/campaign", status_code=201)
 def start(body: dict, x_user_id: Optional[str] = Header(None)):
@@ -334,7 +336,7 @@ def next_room(cid: str, x_user_id: Optional[str] = Header(None)):
     try:
         c = secure(cid, x_user_id, db)
         if c.status == "in_battle": raise HTTPException(409, "currently in battle")
-        if c.current_room >= 30: raise HTTPException(409, "campaign complete — call /complete")
+        if c.current_room >= 30: raise HTTPException(409, "campaign complete  call /complete")
         c.current_room += 1
         cum = sum(h.level for h in c.heroes)
         is_battle = random.random() < battle_chance(cum)
@@ -490,8 +492,8 @@ def process_battle_result(cid: str, x_user_id: Optional[str] = Header(None)):
         gold_lost = 0
         if won:
             # Exp(L) = 50*L per enemy, divided among survivors
-            total_exp = sum(50 * u.get("level",1) for u in enemies)
-            total_gold = sum(75 * u.get("level",1) for u in enemies)
+            total_exp = sum(100 * u.get("level",1) for u in enemies)  # generous reward
+            total_gold = sum(100 * u.get("level",1) for u in enemies)
             # Spec: exp split among heroes still standing (current_health > 1)
             survivors = [h for h in c.heroes if h.current_health > 1]
             if not survivors: survivors = [h for h in c.heroes if not h.dead]  # fallback
@@ -604,7 +606,7 @@ def save_party(cid: str, body: dict, x_user_id: Optional[str] = Header(None)):
         return {"partySaved": party_id is not None, "partyId": party_id, "needsReplacement": False}
     finally: db.close()
 
-# ── Internal helpers ──────────────────────────────────────────────────────────
+#  Internal helpers
 
 def _start_battle(c: Campaign, db) -> str:
     alive = [h for h in c.heroes if not h.dead]
@@ -614,18 +616,39 @@ def _start_battle(c: Campaign, db) -> str:
              "currentHealth": h.current_health, "currentMana": h.current_mana,
              "abilities": get_abilities(h), "passives": get_passives(h)} for h in alive]
 
-    # Enemy scaling: cumulative enemy level in [max(0,player_cum-10), player_cum]
-    player_cum = sum(h.level for h in c.heroes)
-    min_cum = max(1, player_cum - 10)
-    max_cum = max(1, player_cum)
-    enemy_cum = random.randint(min_cum, max_cum)
-    n_enemies = random.randint(1, min(5, max(1, enemy_cum)))
-    levels = _distribute_levels(enemy_cum, n_enemies, max_lvl=10)
+    # Enemy level scaling: enemies are capped at the player's average level
+    # so the player can always win. Small downward variance adds variety.
+    player_avg = max(1, sum(h.level for h in c.heroes) // max(1, len(c.heroes)))
+    # Never more enemies than living party members
+    n_enemies  = random.randint(1, len(alive))
+    levels = []
+    for _ in range(n_enemies):
+        variance = random.randint(-2, 0)   # only go equal or lower, never higher
+        lv = max(1, min(player_avg, player_avg + variance))
+        levels.append(lv)
 
-    dfn = [{"name":f"Enemy {i+1}","level":lv,
-             "attack":3+lv*2,"defense":2+lv,
-             "health":60+lv*15,"mana":0,
-             "currentHealth":60+lv*15,"currentMana":0,"abilities":[]} for i,lv in enumerate(levels)]
+    # Enemy defense must be strictly less than the weakest attacker's attack
+    # so the player is always guaranteed to deal at least 1 damage.
+    min_player_attack = min(h.attack for h in alive)
+    max_enemy_defense = max(0, min_player_attack - 1)
+
+    enemy_types = ["Goblin", "Orc", "Skeleton", "Bandit", "Troll", "Wraith", "Golem"]
+    dfn = []
+    for i, lv in enumerate(levels):
+        etype = random.choice(enemy_types)
+        raw_defense = 2 + lv
+        defense = min(raw_defense, max_enemy_defense)
+        dfn.append({
+            "name": f"Lv{lv} {etype}",
+            "level": lv,
+            "attack":  4 + lv * 2,
+            "defense": defense,
+            "health":  60 + lv * 20,
+            "mana": 0,
+            "currentHealth": 60 + lv * 20,
+            "currentMana": 0,
+            "abilities": [],
+        })
 
     try:
         r = httpx.post(f"{BATTLE_URL}/battle",
@@ -634,16 +657,6 @@ def _start_battle(c: Campaign, db) -> str:
         return r.json().get("battleId", str(uuid.uuid4()))
     except Exception:
         return str(uuid.uuid4())
-
-def _distribute_levels(total: int, n: int, max_lvl: int = 10) -> list:
-    """Distribute total levels among n enemies, each 1..max_lvl."""
-    levels = [1] * n
-    remaining = total - n
-    for _ in range(max(0, remaining)):
-        eligible = [i for i,lv in enumerate(levels) if lv < max_lvl]
-        if not eligible: break
-        levels[random.choice(eligible)] += 1
-    return levels
 
 def _enter_inn(c: Campaign, room: Room, db) -> list:
     """Revive party, record who was healed/revived for the revival log."""

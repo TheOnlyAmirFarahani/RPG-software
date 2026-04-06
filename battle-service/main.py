@@ -25,9 +25,10 @@ class Battle(Base):
     winner          = Column(String)
     created_at      = Column(DateTime, default=datetime.utcnow)
     completed_at    = Column(DateTime)
-    round_order     = Column(String, default="[]")
-    acted_this_round= Column(String, default="[]")
-    wait_queue      = Column(String, default="[]")
+    # Turn management (JSON arrays of unit IDs)
+    round_order     = Column(String, default="[]")   # order for current round
+    acted_this_round= Column(String, default="[]")   # have completed action
+    wait_queue      = Column(String, default="[]")   # FIFO wait queue
     units = relationship("BattleUnit", back_populates="battle",
                          cascade="all, delete-orphan", order_by="BattleUnit.position")
     logs  = relationship("ActionLog", back_populates="battle",
@@ -51,8 +52,8 @@ class BattleUnit(Base):
     stunned        = Column(Boolean, default=False)
     dead           = Column(Boolean, default=False)
     position       = Column(Integer, default=0)
-    abilities      = Column(String, default="")
-    passives       = Column(String, default="")
+    abilities      = Column(String, default="")   # comma-separated
+    passives       = Column(String, default="")   # comma-separated passive effects
     battle         = relationship("Battle", back_populates="units")
 
 class ActionLog(Base):
@@ -66,10 +67,14 @@ class ActionLog(Base):
     damage_dealt   = Column(Integer, default=0)
     healing_done   = Column(Integer, default=0)
     mana_spent     = Column(Integer, default=0)
-    notes          = Column(String)
+    notes          = Column(String)   # e.g. "stunned", "sneak_attack triggered"
     battle         = relationship("Battle", back_populates="logs")
 
 Base.metadata.create_all(bind=engine)
+
+#
+# PATTERN 6: DECORATOR  SpecializationBonus wraps BaseStats
+#
 
 class HeroStats(ABC):
     @abstractmethod
@@ -90,6 +95,10 @@ class SpecializationBonus(HeroStats):
     def attack(self) -> int:  return self._w.attack()  + self._b.get("attack",  0)
     def defense(self) -> int: return self._w.defense() + self._b.get("defense", 0)
 
+#
+# PATTERN 5: BUILDER  BattleStateBuilder
+#
+
 class BattleStateBuilder:
     def __init__(self): self._s = {}
 
@@ -101,6 +110,7 @@ class BattleStateBuilder:
     def with_units(self, units, active_id, turn_order_ids):
         self._s["activeUnitId"] = active_id
         self._s["turnOrder"] = turn_order_ids          # spec US3: show order
+        # waitQueue is set by the caller via _build_state directly
         self._s["attackerUnits"] = [_udto(u) for u in units if u.team == "attacker"]
         self._s["defenderUnits"] = [_udto(u) for u in units if u.team == "defender"]
         return self
@@ -113,6 +123,10 @@ class BattleStateBuilder:
         return self
 
     def build(self): return self._s
+
+#
+# PATTERN 4: OBSERVER  BattleEventBus
+#
 
 class BattleListener(ABC):
     @abstractmethod
@@ -130,6 +144,10 @@ _bus = type('Bus', (), {
 })()
 _bus.subscribe(BattleCompletionListener())
 
+#
+# PATTERN 2: TEMPLATE METHOD  AbstractAbility
+#
+
 class AbstractAbility(ABC):
     @abstractmethod
     def mana_cost(self) -> int: ...
@@ -140,6 +158,7 @@ class AbstractAbility(ABC):
     def apply_effect(self, actor, targets, units, db) -> dict: ...
 
     def execute(self, actor, primary, units, db) -> dict:
+        # Skeleton: check mana → deduct → select targets → apply → return
         if actor.current_mana < self.mana_cost():
             raise ValueError(f"not enough mana (need {self.mana_cost()}, have {actor.current_mana})")
         actor.current_mana -= self.mana_cost(); db.flush()
@@ -312,6 +331,9 @@ class ReplenishDoubleAbility(ReplenishAbility):
             t.current_mana = min(t.base_mana, t.current_mana+gain); db.flush()
         return {"damage":0,"healing":0,"affected":[]}
 
+#
+# PATTERN 3: FACTORY METHOD  AbilityFactory.create()
+#
 
 class AbilityFactory:
     _MAP = {
@@ -331,6 +353,9 @@ class AbilityFactory:
         if not cls: raise ValueError(f"unknown ability: {name}")
         return cls()
 
+#
+# PATTERN 1: STRATEGY  ActionStrategy and concrete strategies
+#
 
 class ActionStrategy(ABC):
     @abstractmethod
@@ -380,7 +405,7 @@ class CastStrategy(ActionStrategy):
         result.setdefault("notes", "")
         return result
 
-# Turn management
+#  Turn Management
 
 def _get_active_unit_id(battle, units):
     wait_q  = json.loads(battle.wait_queue or "[]")
@@ -406,7 +431,7 @@ def _after_action(battle, actor_id, action_type, units):
     if action_type == "wait":
         if actor_id not in wait_q: wait_q.append(actor_id)
         battle.wait_queue = json.dumps(wait_q)
-        # NOT added to acted, they'll act again from wait queue
+        # NOT added to acted  they'll act again from wait queue
     else:
         if actor_id in wait_q: wait_q.remove(actor_id)
         battle.wait_queue = json.dumps(wait_q)
@@ -420,7 +445,7 @@ def _after_action(battle, actor_id, action_type, units):
     remaining_wait   = [uid for uid in wait_q2 if uid in alive]
 
     if not remaining_normal and not remaining_wait:
-        # Round complete, start new round
+        # Round complete  start new round
         new_order = [u.id for u in sorted(units, key=lambda x: x.position) if not u.dead]
         battle.round_order       = json.dumps(new_order)
         battle.wait_queue        = "[]"
@@ -471,7 +496,7 @@ def _amap(u): return {"unitId":u.id,"newHealth":u.current_health,
                        "newMana":u.current_mana,"newShield":u.current_shield,
                        "isDead":u.dead,"isStunned":u.stunned}
 
-# Routes
+#  Routes
 
 @app.post("/battle", status_code=201)
 def init_battle(body: dict):
@@ -485,6 +510,9 @@ def init_battle(body: dict):
         db.add(battle); db.flush()
 
         def mk_unit(data, team, pos):
+            # Stats from pve-service already include class bonuses  use them directly.
+            # SpecializationBonus decorator is preserved for educational purposes (GoF pattern 6)
+            # but is not applied here to avoid double-counting pre-computed stats.
             u = BattleUnit(
                 id=str(uuid.uuid4()), battle_id=battle.id, team=team,
                 name=data.get("name",team), hero_class=data.get("heroClass"),
@@ -499,6 +527,7 @@ def init_battle(body: dict):
             )
             db.add(u); return u
 
+        # Turn order: highest level → teams alternate
         atk_s = sorted(atk_party, key=lambda x: (x.get("level",1), x.get("attack",5)), reverse=True)
         def_s = sorted(def_party, key=lambda x: (x.get("level",1), x.get("attack",5)), reverse=True)
         pos = 1
@@ -537,6 +566,7 @@ def take_action(bid: str, body: dict):
 
         actor = next(u for u in units if u.id == active_id)
 
+        # Handle stun  consume turn and return updated state (not an error)
         if actor.stunned:
             actor.stunned = False; db.flush()
             _after_action(battle, actor.id, "attack", units)

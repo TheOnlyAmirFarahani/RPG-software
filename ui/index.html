@@ -82,7 +82,7 @@ tr.sel td { background: #2e2550 !important; }
 </head>
 <body>
 <div id="nav">
-  <div class="logo">&#9876; Legends of Sword and Wand</div>
+  <div class="logo">Legends of Sword and Wand</div>
   <span class="user" id="nav-user"></span>
   <button class="nav-btn" id="nav-logout" onclick="doLogout()" style="display:none">Logout</button>
 </div>
@@ -206,7 +206,7 @@ tr.sel td { background: #2e2550 !important; }
       </div>
     </div>
   </div>
-  <div class="panel" style="margin-top:12px">
+  <div class="panel" style="margin-top:12px; display:none">
     <h2>Battle Log</h2>
     <div id="battle-log"></div>
   </div>
@@ -280,34 +280,30 @@ tr.sel td { background: #2e2550 !important; }
 <!-- PVP (US7) -->
 <div id="view-pvp" class="view">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-    <button class="btn-grey" onclick="showView('menu');menuPanel.refresh()">Menu</button>
+    <button class="btn-grey" onclick="leavePvp()">Menu</button>
     <h1 style="margin:0">PvP Arena</h1>
+    <span id="pvp-poll-badge" style="font-size:11px;color:#606870;margin-left:auto"></span>
   </div>
   <div class="row">
     <div class="col-fixed">
       <div class="panel">
         <h2>Challenge Player</h2>
         <div class="msg" id="msg-pvp"></div>
-        <label>Username</label>
+        <label>Username to challenge</label>
         <input id="pvp-target" type="text" placeholder="their username">
-        <button class="btn-red" onclick="sendInvite()">Send Invitation</button>
-        <button class="btn-grey" onclick="pvpLookup()">Look Up Invite</button>
+        <button class="btn-red" style="width:100%" onclick="sendInvite()">Send Invitation</button>
       </div>
       <div class="panel">
-        <h2>Invitations</h2>
-        <table id="pvp-invites"><tr><th>From/To</th><th>Status</th></tr></table>
-        <div style="margin-top:8px">
-          <button class="btn-green" onclick="pvpRespond('accept')">Accept</button>
-          <button class="btn-red" onclick="pvpRespond('decline')">Decline</button>
-          <button class="btn-primary" onclick="pvpSelectParty()">Select Party and Fight</button>
-        </div>
+        <h2>Invitations <span id="invite-count" style="color:#606870;font-size:11px"></span></h2>
+        <table id="pvp-invites">
+          <tr><th>From / To</th><th>Status</th><th>Action</th></tr>
+        </table>
       </div>
     </div>
     <div class="col">
       <div class="panel">
         <h2>League Standings</h2>
         <table id="league-table"><tr><th>#</th><th>Player</th><th>Wins</th><th>Losses</th></tr></table>
-        <button class="btn-grey" onclick="pvpPanel.loadLeague()" style="margin-top:8px">Refresh</button>
       </div>
     </div>
   </div>
@@ -602,7 +598,7 @@ function renderBattle(s){
   } else {
     // Bug 1 fix: auto-execute enemy turns so defenders never wait for player input
     const isEnemyTurn=(s.defenderUnits||[]).some(u=>u.unitId===s.activeUnitId);
-    if(isEnemyTurn) setTimeout(()=>doEnemyAutoAction(s.activeUnitId),700);
+    if(isEnemyTurn) setTimeout(()=>doEnemyAutoAction(s.activeUnitId),400);
   }
 }
 function renderUnitCards(cid,units,activeId,team){
@@ -629,14 +625,18 @@ function renderUnitCards(cid,units,activeId,team){
   });
 }
 async function doEnemyAutoAction(aid){
-  // Bug 1 fix: enemies attack a random living attacker (not themselves)
+  const unit=(battleState.defenderUnits||[]).find(u=>u.unitId===aid);
+  const unitName=unit?unit.name:'Enemy';
+  msg('msg-battle', unitName+' is acting...', 'warn');
   const targets=(battleState.attackerUnits||[]).filter(u=>!u.dead);
   if(!targets.length)return;
   const target=targets[Math.floor(Math.random()*targets.length)];
   const req={unitId:aid,actionType:'attack',targetUnitId:target.unitId};
   const r=await POST('/battle/'+battleId+'/action',req);
-  if(r.ok){battleState=r.data;renderBattle(r.data);appendBattleLog(r.data);}
-  // Enemy action errors are silently ignored to avoid confusing the player
+  if(r.ok){
+    battleState=r.data;renderBattle(r.data);appendBattleLog(r.data);
+    if(r.data.status!=='completed') msg('msg-battle','','');
+  }
 }
 async function doAction(type){
   if(!battleState||battleState.status==='completed')return;
@@ -801,58 +801,137 @@ function skipSaveParty(){afterComplete();}
 function closeReplaceModal(){document.getElementById('replace-modal').style.display='none';}
 function afterComplete(){campaignId=battleId=campaignComplete=null;showView('menu');menuPanel.refresh();}
 
-const pvpPanel={
-  async refresh(){await this.loadLeague();},
-  async loadLeague(){
-    const r=await GET('/pvp/league');
-    if(!r.ok)return;
-    const t=document.getElementById('league-table');
-    t.innerHTML='<tr><th>#</th><th>Player</th><th>Wins</th><th>Losses</th></tr>';
-    (r.data.standings||[]).forEach(s=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${s.rank}</td><td>${s.username}</td><td>${s.wins}</td><td>${s.losses}</td>`;t.appendChild(tr);});
+// ── PvP state ────────────────────────────────────────────────────────────────
+let pvpPollInterval = null;
+
+function leavePvp() {
+  stopPvpPolling();
+  showView('menu');
+  menuPanel.refresh();
+}
+
+function startPvpPolling() {
+  pvpPanel.loadInvites();        // immediate first load
+  pvpPanel.loadLeague();
+  pvpPollInterval = setInterval(() => pvpPanel.loadInvites(), 3000);
+  document.getElementById('pvp-poll-badge').textContent = 'auto-refreshing every 3s';
+}
+
+function stopPvpPolling() {
+  if (pvpPollInterval) { clearInterval(pvpPollInterval); pvpPollInterval = null; }
+  document.getElementById('pvp-poll-badge').textContent = '';
+}
+
+const pvpPanel = {
+  async refresh() {
+    startPvpPolling();
+  },
+
+  async loadLeague() {
+    const r = await GET('/pvp/league');
+    if (!r.ok) return;
+    const t = document.getElementById('league-table');
+    t.innerHTML = '<tr><th>#</th><th>Player</th><th>Wins</th><th>Losses</th></tr>';
+    (r.data.standings || []).forEach(s => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${s.rank}</td><td>${s.username}</td><td>${s.wins}</td><td>${s.losses}</td>`;
+      t.appendChild(tr);
+    });
+  },
+
+  async loadInvites() {
+    const r = await GET('/pvp/invitations');
+    if (!r.ok) return;
+    const invs = r.data.invitations || [];
+    document.getElementById('invite-count').textContent = invs.length ? '(' + invs.length + ')' : '';
+    const t = document.getElementById('pvp-invites');
+    t.innerHTML = '<tr><th>From / To</th><th>Status</th><th>Action</th></tr>';
+    invs.forEach(inv => {
+      const isSender   = inv.inviterId === userId;
+      const isReceiver = inv.inviteeId === userId;
+      const direction  = isSender ? 'To: ' + inv.inviteeUsername : 'From: ' + inv.inviterUsername;
+      const tr = document.createElement('tr');
+      // Build action buttons inline in the row
+      let actions = '';
+      if (isReceiver && inv.status === 'pending') {
+        actions = `<button class="btn-green" style="padding:2px 8px;font-size:11px"
+                     onclick="pvpRespond('accept','${inv.invitationId}')">Accept</button>
+                   <button class="btn-red" style="padding:2px 8px;font-size:11px"
+                     onclick="pvpRespond('decline','${inv.invitationId}')">Decline</button>`;
+      } else if (inv.status === 'accepted') {
+        actions = `<button class="btn-primary" style="padding:2px 8px;font-size:11px"
+                     onclick="pvpSelectParty('${inv.invitationId}')">Select Party</button>`;
+      } else if (inv.status === 'in_battle') {
+        actions = `<button class="btn-gold" style="padding:2px 8px;font-size:11px"
+                     onclick="pvpJoinBattle('${inv.activeBattleId}')">Join Battle</button>`;
+      }
+      tr.innerHTML = `<td>${direction}</td>
+                      <td><span class="tag tag-info">${inv.status}</span></td>
+                      <td>${actions}</td>`;
+      t.appendChild(tr);
+    });
   }
 };
-function addInviteRow(inv,dir){
-  const t=document.getElementById('pvp-invites');
-  const tr=document.createElement('tr');tr.dataset.invId=inv.invitationId;
-  tr.innerHTML=`<td>${dir==='sent'?'To: '+inv.inviteeId:'From: '+inv.inviterUsername}</td><td><span class="tag tag-info">${inv.status}</span></td>`;
-  tr.onclick=()=>{t.querySelectorAll('tr').forEach(r=>r.classList.remove('sel'));tr.classList.add('sel');selectedPvpInvite=inv.invitationId;};
-  t.appendChild(tr);tr.click();
+
+async function sendInvite() {
+  const invitee = document.getElementById('pvp-target').value.trim();
+  if (!invitee) { msg('msg-pvp', 'Enter a username', 'err'); return; }
+  const r = await POST('/pvp/invitations', {inviteeUsername: invitee});
+  if (r.ok) {
+    msg('msg-pvp', 'Invitation sent to ' + invitee + '!', 'ok');
+    document.getElementById('pvp-target').value = '';
+    pvpPanel.loadInvites();
+  } else {
+    msg('msg-pvp', r.data.detail || r.data.error || 'Failed', 'err');
+  }
 }
-async function sendInvite(){
-  const invitee=document.getElementById('pvp-target').value.trim();
-  if(!invitee){msg('msg-pvp','Enter a username','err');return;}
-  const r=await POST('/pvp/invitations',{inviteeUsername:invitee});
-  if(r.ok){msg('msg-pvp','Invitation sent! ID: '+r.data.invitationId,'ok');document.getElementById('pvp-target').value='';addInviteRow(r.data,'sent');}
-  else msg('msg-pvp',r.data.detail||r.data.error||'Failed','err');
-}
-async function pvpLookup(){
-  const id=prompt('Paste invitation ID:');if(!id)return;
-  const r=await GET('/pvp/invitations/'+id);
-  if(r.ok)addInviteRow({...r.data,invitationId:id},r.data.inviterId===userId?'sent':'received');
-  else msg('msg-pvp','Invitation not found','err');
-}
-async function pvpRespond(action){
-  if(!selectedPvpInvite){msg('msg-pvp','Select an invitation','err');return;}
-  const r=await PUT('/pvp/invitations/'+selectedPvpInvite,{action});
-  if(r.ok)msg('msg-pvp','Invitation '+r.data.status,'ok');
-  else msg('msg-pvp',r.data.detail||r.data.error||'Failed','err');
+
+async function pvpRespond(action, invId) {
+  const r = await PUT('/pvp/invitations/' + invId, {action});
+  if (r.ok) msg('msg-pvp', 'Invitation ' + r.data.status, 'ok');
+  else msg('msg-pvp', r.data.detail || r.data.error || 'Failed', 'err');
+  pvpPanel.loadInvites();
   pvpPanel.loadLeague();
 }
-async function pvpSelectParty(){
-  if(!selectedPvpInvite){msg('msg-pvp','Select an invitation','err');return;}
-  const pr=await GET('/profile/'+userId+'/parties');
-  if(!pr.ok||(pr.data.parties||[]).length===0){msg('msg-pvp','No saved parties. Complete a campaign first.','err');return;}
-  const parties=pr.data.parties;
-  const names=parties.map((p,i)=>(i+1)+'. '+p.name+' ('+( (p.heroes||[]).length)+' heroes)').join('\n');
-  const choice=prompt('Choose party:\n'+names+'\nEnter number:');
-  if(!choice)return;
-  const idx=parseInt(choice)-1;
-  if(isNaN(idx)||idx<0||idx>=parties.length){msg('msg-pvp','Invalid choice','err');return;}
-  const r=await POST('/pvp/invitations/'+selectedPvpInvite+'/select-party',{partyId:parties[idx].partyId});
-  if(r.ok){
-    if(r.data.status==='in_battle'){msg('msg-pvp','Battle started!','ok');battleId=r.data.battleId;showView('battle');await refreshBattle();}
-    else msg('msg-pvp','Waiting for opponent...','info');
-  }else msg('msg-pvp',r.data.detail||r.data.error||'Failed','err');
+
+async function pvpSelectParty(invId) {
+  const pr = await GET('/profile/' + userId + '/parties');
+  if (!pr.ok || !(pr.data.parties || []).length) {
+    msg('msg-pvp', 'No saved parties  complete a PvE campaign first', 'err'); return;
+  }
+  const parties = pr.data.parties;
+  // Show party choices as a simple select dialog
+  const names = parties.map((p, i) =>
+    (i + 1) + '. ' + p.name + ' (' + (p.heroes || []).length + ' heroes)'
+  ).join('\n');
+  const choice = prompt('Choose your party:\n' + names + '\n\nEnter number:');
+  if (!choice) return;
+  const idx = parseInt(choice) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= parties.length) {
+    msg('msg-pvp', 'Invalid choice', 'err'); return;
+  }
+  const r = await POST('/pvp/invitations/' + invId + '/select-party',
+                       {partyId: parties[idx].partyId});
+  if (r.ok) {
+    if (r.data.status === 'in_battle') {
+      stopPvpPolling();
+      battleId = r.data.battleId;
+      showView('battle');
+      await refreshBattle();
+    } else {
+      msg('msg-pvp', 'Party selected  waiting for opponent to choose theirs…', 'info');
+      pvpPanel.loadInvites();
+    }
+  } else {
+    msg('msg-pvp', r.data.detail || r.data.error || 'Failed', 'err');
+  }
+}
+
+async function pvpJoinBattle(bId) {
+  stopPvpPolling();
+  battleId = bId;
+  showView('battle');
+  await refreshBattle();
 }
 </script>
 </body>

@@ -130,6 +130,7 @@ def get_profile(uid: str, x_user_id: Optional[str] = Header(None)):
         ac = db.query(ActiveCampaign).filter_by(user_id=uid).first()
         all_scores = db.query(Score).order_by(Score.campaign_score.desc()).all()
         my_scores  = db.query(Score).filter_by(user_id=uid).order_by(Score.achieved_at.desc()).all()
+        # Compute rank: position of best score in global leaderboard
         my_best = db.query(Score).filter_by(user_id=uid).order_by(Score.campaign_score.desc()).first()
         rank = None
         if my_best:
