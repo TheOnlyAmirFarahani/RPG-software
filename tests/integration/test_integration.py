@@ -207,6 +207,7 @@ class TestScorePersistence:
 
 
 class TestPvPFlow:
+    @classmethod
     def setup_method(self):
         """Ensure two players exist with saved parties."""
         ts = int(time.time())
