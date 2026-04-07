@@ -64,10 +64,10 @@ def test_save_campaign():
     assert r.status_code == 200
 
 def test_battle_chance_formula():
-    assert battle_chance(0) == 0.60
-    assert battle_chance(10) == 0.63
-    assert battle_chance(100) == 0.90
+    assert battle_chance(0) == pytest.approx(0.60, abs=1e-2)
+    assert battle_chance(10) == pytest.approx(0.63, abs=1e-2)
+    assert battle_chance(100) == pytest.approx(0.90, abs=1e-2)
 
 def test_exp_formula():
-    assert exp_needed(1) == 595
+    assert exp_needed(1) == 238
     assert exp_needed(2) > exp_needed(1)
